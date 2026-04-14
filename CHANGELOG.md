@@ -30,6 +30,6 @@
 - Enhanced data validation and diagnostics
 - Improved duplicate detection logic to compare against raw input only
 
-## [0.1.5.dev0] - Unreleased
+## [0.1.5] - 2026-04-14
 ### Added
 - Radar charts
