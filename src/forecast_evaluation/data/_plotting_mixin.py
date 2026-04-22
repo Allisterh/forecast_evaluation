@@ -438,3 +438,59 @@ class PlottingMixin:
             custom_labels=custom_labels,
             existing_plot=existing_plot,
         )
+
+    def plot_forecast_error_density(
+        self,
+        variable: str,
+        horizon: int,
+        metric: Literal["levels", "pop", "yoy"],
+        frequency: Literal["Q", "M"],
+        source: str,
+        k: int = 12,
+        highlight_dates: Optional[Union[str, list[str]]] = None,
+        highlight_vintages: Optional[Union[str, list[str]]] = None,
+        return_plot: bool = False,
+    ):
+        """Plot density of forecast errors for a specific variable/source/horizon combination.
+
+        Parameters
+        ----------
+        variable : str
+            The variable to analyse (e.g., 'gdpkp').
+        horizon : int
+            The forecast horizon to analyse.
+        metric : {"levels", "pop", "yoy"}
+            The metric to analyse.
+        frequency : {"Q", "M"}
+            The frequency to analyse.
+        source : str
+            The source of the forecasts.
+        k : int, default 12
+            Number of revisions used to define the outturns.
+        highlight_dates : str or list of str, optional
+            Date(s) to highlight on the density plot (format: 'YYYY-MM-DD').
+        highlight_vintages : str or list of str, optional
+            Vintage date(s) to highlight (format: 'YYYY-MM-DD'). Takes precedence
+            over highlight_dates.
+        return_plot : bool, default False
+            If True, returns the matplotlib figure and axis objects.
+
+        Returns
+        -------
+        fig, ax : tuple or None
+            If return_plot is True, returns a tuple (fig, ax). Otherwise, returns None.
+        """
+        from forecast_evaluation.visualisations.forecast_errors import plot_forecast_error_density
+
+        return plot_forecast_error_density(
+            data=self,
+            variable=variable,
+            horizon=horizon,
+            metric=metric,
+            frequency=frequency,
+            source=source,
+            k=k,
+            highlight_dates=highlight_dates,
+            highlight_vintages=highlight_vintages,
+            return_plot=return_plot,
+        )

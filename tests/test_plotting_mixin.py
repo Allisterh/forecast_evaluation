@@ -195,3 +195,19 @@ def test_plot_errors_across_time_multiple_horizons(fer_minimal_fd: ForecastData)
         return_plot=True,
     )
     assert isinstance(result, tuple) and len(result) == 2
+
+
+def test_plot_forecast_error_density_returns_fig_ax(fer_minimal_fd: ForecastData):
+    horizon = fer_minimal_fd._main_table["forecast_horizon"].iloc[0]
+    result = fer_minimal_fd.plot_forecast_error_density(
+        variable=VARIABLE,
+        horizon=horizon,
+        metric=METRIC,
+        frequency=FREQUENCY,
+        source=SOURCE,
+        return_plot=True,
+    )
+    assert isinstance(result, tuple) and len(result) == 2
+    fig, ax = result
+    assert isinstance(fig, plt.Figure)
+    assert isinstance(ax, plt.Axes)
