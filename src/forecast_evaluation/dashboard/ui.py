@@ -64,6 +64,7 @@ def create_sidebar(data):
     loss_functions = ["rmse", "rmedse", "mean_abs_error"]
     loss_functions_tests = ["mse", "mae"]
     k_values = list(range(len(vintages) + 1))
+    has_outturn_vintages = getattr(data, "outturn_vintages", True)
 
     if hasattr(data, "_density_forecasts") and not data._density_forecasts.empty:
         quantiles = data._density_forecasts["quantile"].unique()
@@ -374,32 +375,46 @@ def create_sidebar(data):
             rolling_relative_accuracy_tab + _or + dm_tab,
             ui.input_select("loss_function", "Loss function:", choices=loss_functions_tests, selected="MSE"),
         ),
-        # Outturn taken at t + (single selection)
-        ui.panel_conditional(
-            "input.tabs != 'About' && input.tabs != 'Outturn Revisions' && !(input.tabs == 'Efficiency' && input.efficiency_subtabs == 'Blanchard-Leigh') && !(input.tabs == 'Efficiency' && input.efficiency_subtabs == 'Revisions predictability')",
-            ui.input_select("k", f"Data vintage ({period_label} after first release)", choices=k_values, selected=12),
-        ),
-        # Outturn taken at t + (multiple selection for outturn revisions)
-        ui.panel_conditional(
-            outturn_revisions_subtab,
-            ui.input_selectize(
-                "k_multiple",
-                f"Data vintage ({period_label} after first release)",
-                choices=k_values[1:],
-                multiple=True,
-                selected=[12],
-            ),
-        ),
-        # Outturn taken at t + (multiple selection for outturns)
-        ui.panel_conditional(
-            outturns_subtab,
-            ui.input_selectize(
-                "k_multiple_outturns",
-                f"Data vintage ({period_label} after first release)",
-                choices=k_values,
-                multiple=True,
-                selected=[12],
-            ),
+        # Outturn taken at t + (single selection) — only shown when outturn vintages are available
+        *(
+            [
+                ui.panel_conditional(
+                    "input.tabs != 'About' && input.tabs != 'Outturn Revisions' && !(input.tabs == 'Efficiency' && input.efficiency_subtabs == 'Blanchard-Leigh') && !(input.tabs == 'Efficiency' && input.efficiency_subtabs == 'Revisions predictability')",
+                    ui.input_select("k", f"Data vintage ({period_label} after first release)", choices=k_values, selected=12),
+                ),
+                # Outturn taken at t + (multiple selection for outturn revisions)
+                ui.panel_conditional(
+                    outturn_revisions_subtab,
+                    ui.input_selectize(
+                        "k_multiple",
+                        f"Data vintage ({period_label} after first release)",
+                        choices=k_values[1:],
+                        multiple=True,
+                        selected=[12],
+                    ),
+                ),
+                # Outturn taken at t + (multiple selection for outturns)
+                ui.panel_conditional(
+                    outturns_subtab,
+                    ui.input_selectize(
+                        "k_multiple_outturns",
+                        f"Data vintage ({period_label} after first release)",
+                        choices=k_values,
+                        multiple=True,
+                        selected=[12],
+                    ),
+                ),
+            ]
+            if has_outturn_vintages
+            else [
+                # Hidden default k inputs so server-side handlers can still read input.k()
+                ui.div(
+                    ui.input_select("k", "k", choices=[0], selected=0),
+                    ui.input_selectize("k_multiple", "k_multiple", choices=[0], multiple=True, selected=[0]),
+                    ui.input_selectize("k_multiple_outturns", "k_multiple_outturns", choices=[0], multiple=True, selected=[0]),
+                    style="display: none;",
+                ),
+            ]
         ),
         # Vintage selector
         ui.panel_conditional(

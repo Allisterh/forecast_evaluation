@@ -15,6 +15,12 @@ def create_outturn_revisions(data: ForecastData):
     pd.DataFrame
         DataFrame containing outturn revisions.
     """
+    if not data.outturn_vintages:
+        raise ValueError(
+            "Outturn revisions require outturn vintages. "
+            "Set outturn_vintages=True when creating ForecastData."
+        )
+
     outturns = data.outturns
 
     # Get first release of data
