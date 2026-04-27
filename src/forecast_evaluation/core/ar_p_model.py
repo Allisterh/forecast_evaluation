@@ -85,9 +85,6 @@ def build_ar_p_model(
     if estimation_start_date is not None:
         df = df[df["date"] > pd.to_datetime(estimation_start_date)]
 
-    # Group by unique combinations
-    grouped = df.groupby(["variable", "metric", "frequency", "vintage_date"])
-
     if forecast_periods < 0:
         raise ValueError("forecast_periods must be >= 0")
 
@@ -97,94 +94,214 @@ def build_ar_p_model(
     date_freq = "QE" if frequency == "Q" else "ME"
     date_offset = pd.offsets.QuarterEnd() if frequency == "Q" else pd.offsets.MonthEnd()
 
-    for (grp_variable, grp_metric, grp_frequency, grp_vintage_date), group in tqdm(
-        grouped, desc=f"Building AR(p) model for {variable} ({frequency})", disable=not show_progress
-    ):
-        group = group.sort_values("date")
-
-        try:
-            # Get the latest date and value
-            latest_date = group["date"].max()
-            latest_value = group[group["date"] == latest_date]["value"].iloc[0]
-
-            # Check if we have enough data points
-            if len(group) < 8:
-                print(
-                    f"Not enough data points for variable {grp_variable}, vintage_date {grp_vintage_date}. Using AR(1)"
-                )
-                optimal_lag = 1
-            else:
-                # Prepare data for AR model (no differencing)
-                model_data = group.set_index("date")
-                model_data.index = pd.DatetimeIndex(model_data.index, freq=date_freq)
-
-                # Select optimal lag using BIC with MLE estimation (on original series)
-                max_possible_lag = 2
-                best_bic = np.inf
-                optimal_lag = 1
-
-                for lag in range(1, max_possible_lag + 1):
-                    try:
-                        # Fit AR(lag) model with t-distribution using MLE on original series
-                        model_result = fit_ar_t_mle(model_data["value"], lag)
-                        if model_result["success"] and model_result["bic"] < best_bic:
-                            best_bic = model_result["bic"]
-                            optimal_lag = lag
-                    except Exception as e:
-                        print(f"  AR({lag}): Failed to fit - {e}")
-                        continue
-
-            # Include the latest value in the forecast
-            forecasts.append(
-                {
-                    "date": latest_date,
-                    "variable": grp_variable,
-                    "metric": grp_metric,
-                    "vintage_date": grp_vintage_date,
-                    "value": latest_value,
-                    "frequency": grp_frequency,
-                    "optimal_lag": optimal_lag,
-                    "source": "baseline ar(p) model",
-                    "forecast_horizon": -1,
-                }
+    if not data.outturn_vintages:
+        # --- No outturn vintages: create benchmark forecasts for each forecast vintage ---
+        if data._raw_forecasts is None or data._raw_forecasts.empty:
+            raise ValueError(
+                "Cannot build benchmark forecasts when outturn_vintages=False and no forecasts have been added. "
+                "Add forecasts first so that forecast vintage dates are available."
             )
 
-            # Prepare data for final AR model fitting (no differencing)
-            model_data = group.set_index("date")
-            model_data.index = pd.DatetimeIndex(model_data.index, freq=date_freq)
+        # Get unique forecast vintage dates for this variable/frequency
+        raw_fc = data._raw_forecasts
+        relevant = raw_fc[
+            (raw_fc["variable"] == variable) & (raw_fc["frequency"] == frequency)
+        ]
+        vintage_dates = sorted(relevant["vintage_date"].dropna().unique())
+        if len(vintage_dates) == 0:
+            raise ValueError(
+                f"No forecast vintage dates found for variable '{variable}' and frequency '{frequency}'."
+            )
 
-            # Fit final AR model with t-distribution using MLE on original series
-            final_model = fit_ar_t_mle(model_data["value"], optimal_lag)
+        # Group by variable/metric/frequency only (no vintage_date in outturns)
+        grouped = df.groupby(["variable", "metric", "frequency"])
 
-            if not final_model["success"]:
-                print(f"  Warning: Final model fit failed for {grp_variable}, {grp_vintage_date}. Using fallback.")
-                # Fallback to simple forecasts
-                forecast_values = np.full(forecast_periods, latest_value)
-            else:
-                # Generate forecasts directly (no integration needed)
-                forecast_values = generate_ar_t_forecasts(model_data["value"], final_model, steps=forecast_periods)
+        for (grp_variable, grp_metric, grp_frequency), group in tqdm(
+            grouped, desc=f"Building AR(p) model for {variable} ({frequency})", disable=not show_progress
+        ):
+            group = group.sort_values("date")
 
-            # Generate forecast dates
-            forecast_dates = pd.date_range(start=latest_date + date_offset, periods=forecast_periods, freq=date_freq)
+            for grp_vintage_date in vintage_dates:
+                try:
+                    # Only use data available before this vintage date
+                    available = group[group["date"] < grp_vintage_date]
 
-            for period, (date, value) in enumerate(zip(forecast_dates, forecast_values), start=0):
+                    if available.empty:
+                        continue
+
+                    latest_date = available["date"].max()
+                    latest_value = available[available["date"] == latest_date]["value"].iloc[0]
+
+                    # Check if we have enough data points
+                    if len(available) < 8:
+                        optimal_lag = 1
+                    else:
+                        model_data = available.set_index("date")
+                        model_data.index = pd.DatetimeIndex(model_data.index, freq=date_freq)
+
+                        max_possible_lag = 2
+                        best_bic = np.inf
+                        optimal_lag = 1
+
+                        for lag in range(1, max_possible_lag + 1):
+                            try:
+                                model_result = fit_ar_t_mle(model_data["value"], lag)
+                                if model_result["success"] and model_result["bic"] < best_bic:
+                                    best_bic = model_result["bic"]
+                                    optimal_lag = lag
+                            except Exception as e:
+                                print(f"  AR({lag}): Failed to fit - {e}")
+                                continue
+
+                    forecasts.append(
+                        {
+                            "date": latest_date,
+                            "variable": grp_variable,
+                            "metric": grp_metric,
+                            "vintage_date": grp_vintage_date,
+                            "value": latest_value,
+                            "frequency": grp_frequency,
+                            "optimal_lag": optimal_lag,
+                            "source": "baseline ar(p) model",
+                            "forecast_horizon": -1,
+                        }
+                    )
+
+                    model_data = available.set_index("date")
+                    model_data.index = pd.DatetimeIndex(model_data.index, freq=date_freq)
+
+                    final_model = fit_ar_t_mle(model_data["value"], optimal_lag)
+
+                    if not final_model["success"]:
+                        forecast_values = np.full(forecast_periods, latest_value)
+                    else:
+                        forecast_values = generate_ar_t_forecasts(
+                            model_data["value"], final_model, steps=forecast_periods
+                        )
+
+                    forecast_dates = pd.date_range(
+                        start=latest_date + date_offset, periods=forecast_periods, freq=date_freq
+                    )
+
+                    for period, (date, value) in enumerate(zip(forecast_dates, forecast_values), start=0):
+                        forecasts.append(
+                            {
+                                "date": date,
+                                "variable": grp_variable,
+                                "metric": grp_metric,
+                                "vintage_date": grp_vintage_date,
+                                "value": value,
+                                "frequency": grp_frequency,
+                                "optimal_lag": optimal_lag,
+                                "source": "baseline ar(p) model",
+                                "forecast_horizon": period,
+                            }
+                        )
+
+                except Exception as e:
+                    print(
+                        f"Skipping vintage {grp_vintage_date} for {grp_variable}, {grp_frequency} due to error: {e}"
+                    )
+                    continue
+    else:
+        # --- Standard path: outturn vintages available ---
+        grouped = df.groupby(["variable", "metric", "frequency", "vintage_date"])
+
+        for (grp_variable, grp_metric, grp_frequency, grp_vintage_date), group in tqdm(
+            grouped, desc=f"Building AR(p) model for {variable} ({frequency})", disable=not show_progress
+        ):
+            group = group.sort_values("date")
+
+            try:
+                # Get the latest date and value
+                latest_date = group["date"].max()
+                latest_value = group[group["date"] == latest_date]["value"].iloc[0]
+
+                # Check if we have enough data points
+                if len(group) < 8:
+                    print(
+                        f"Not enough data points for variable {grp_variable}, "
+                        f"vintage_date {grp_vintage_date}. Using AR(1)"
+                    )
+                    optimal_lag = 1
+                else:
+                    # Prepare data for AR model (no differencing)
+                    model_data = group.set_index("date")
+                    model_data.index = pd.DatetimeIndex(model_data.index, freq=date_freq)
+
+                    # Select optimal lag using BIC with MLE estimation (on original series)
+                    max_possible_lag = 2
+                    best_bic = np.inf
+                    optimal_lag = 1
+
+                    for lag in range(1, max_possible_lag + 1):
+                        try:
+                            # Fit AR(lag) model with t-distribution using MLE on original series
+                            model_result = fit_ar_t_mle(model_data["value"], lag)
+                            if model_result["success"] and model_result["bic"] < best_bic:
+                                best_bic = model_result["bic"]
+                                optimal_lag = lag
+                        except Exception as e:
+                            print(f"  AR({lag}): Failed to fit - {e}")
+                            continue
+
+                # Include the latest value in the forecast
                 forecasts.append(
                     {
-                        "date": date,
+                        "date": latest_date,
                         "variable": grp_variable,
                         "metric": grp_metric,
                         "vintage_date": grp_vintage_date,
-                        "value": value,
+                        "value": latest_value,
                         "frequency": grp_frequency,
                         "optimal_lag": optimal_lag,
                         "source": "baseline ar(p) model",
-                        "forecast_horizon": period,
+                        "forecast_horizon": -1,
                     }
                 )
 
-        except Exception as e:
-            print(f"Skipping group {grp_variable}, {grp_frequency}, {grp_vintage_date} due to error: {e}")
-            continue
+                # Prepare data for final AR model fitting (no differencing)
+                model_data = group.set_index("date")
+                model_data.index = pd.DatetimeIndex(model_data.index, freq=date_freq)
+
+                # Fit final AR model with t-distribution using MLE on original series
+                final_model = fit_ar_t_mle(model_data["value"], optimal_lag)
+
+                if not final_model["success"]:
+                    print(
+                        f"  Warning: Final model fit failed for {grp_variable}, {grp_vintage_date}. Using fallback."
+                    )
+                    # Fallback to simple forecasts
+                    forecast_values = np.full(forecast_periods, latest_value)
+                else:
+                    # Generate forecasts directly (no integration needed)
+                    forecast_values = generate_ar_t_forecasts(
+                        model_data["value"], final_model, steps=forecast_periods
+                    )
+
+                # Generate forecast dates
+                forecast_dates = pd.date_range(
+                    start=latest_date + date_offset, periods=forecast_periods, freq=date_freq
+                )
+
+                for period, (date, value) in enumerate(zip(forecast_dates, forecast_values), start=0):
+                    forecasts.append(
+                        {
+                            "date": date,
+                            "variable": grp_variable,
+                            "metric": grp_metric,
+                            "vintage_date": grp_vintage_date,
+                            "value": value,
+                            "frequency": grp_frequency,
+                            "optimal_lag": optimal_lag,
+                            "source": "baseline ar(p) model",
+                            "forecast_horizon": period,
+                        }
+                    )
+
+            except Exception as e:
+                print(f"Skipping group {grp_variable}, {grp_frequency}, {grp_vintage_date} due to error: {e}")
+                continue
 
     forecast_df = pd.DataFrame(forecasts)
 

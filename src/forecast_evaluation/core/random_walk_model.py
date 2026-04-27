@@ -78,60 +78,136 @@ def build_random_walk_model(
     # Generate random walk forecasts
     forecasts = []
 
-    # Group by unique combinations
-    grouped = df.groupby(["variable", "metric", "frequency", "vintage_date"])
-
-    for (variable, metric, frequency, vintage_date), group in tqdm(
-        grouped, desc=f"Building random walk model for {variable} ({frequency})", disable=not show_progress
-    ):
-        group = group.sort_values("date")
-
-        try:
-            # Get the latest date and value
-            latest_date = group["date"].max()
-            latest_value = group[group["date"] == latest_date]["value"].iloc[0]
-
-            # Include the latest value in the forecast
-            forecasts.append(
-                {
-                    "date": latest_date,
-                    "variable": variable,
-                    "metric": metric,
-                    "vintage_date": vintage_date,
-                    "value": latest_value,
-                    "frequency": frequency,
-                    "source": "baseline random walk model",
-                    "forecast_horizon": -1,
-                }
+    if not data.outturn_vintages:
+        # --- No outturn vintages: create benchmark forecasts for each forecast vintage ---
+        if data._raw_forecasts is None or data._raw_forecasts.empty:
+            raise ValueError(
+                "Cannot build benchmark forecasts when outturn_vintages=False and no forecasts have been added. "
+                "Add forecasts first so that forecast vintage dates are available."
             )
 
-            # Generate forecast dates
-            if frequency == "M":
-                forecast_dates = pd.date_range(
-                    start=latest_date + pd.offsets.MonthEnd(), periods=forecast_periods, freq="ME"
-                )
-            elif frequency == "Q":
-                forecast_dates = pd.date_range(
-                    start=latest_date + pd.offsets.QuarterEnd(), periods=forecast_periods, freq="QE"
-                )
+        # Get unique forecast vintage dates for this variable/frequency
+        raw_fc = data._raw_forecasts
+        relevant = raw_fc[
+            (raw_fc["variable"] == variable) & (raw_fc["frequency"] == frequency)
+        ]
+        vintage_dates = sorted(relevant["vintage_date"].dropna().unique())
+        if len(vintage_dates) == 0:
+            raise ValueError(
+                f"No forecast vintage dates found for variable '{variable}' and frequency '{frequency}'."
+            )
 
-            # Create forecast entries (random walk - same value for all forecasts)
-            for period, date in enumerate(forecast_dates):
+        # Group by variable/metric/frequency only (no vintage_date in outturns)
+        grouped = df.groupby(["variable", "metric", "frequency"])
+
+        for (grp_variable, grp_metric, grp_frequency), group in tqdm(
+            grouped, desc=f"Building random walk model for {variable} ({frequency})", disable=not show_progress
+        ):
+            group = group.sort_values("date")
+
+            for vintage_date in vintage_dates:
+                try:
+                    # Only use data available before this vintage date
+                    available = group[group["date"] < vintage_date]
+                    if available.empty:
+                        continue
+
+                    latest_date = available["date"].max()
+                    latest_value = available[available["date"] == latest_date]["value"].iloc[0]
+
+                    forecasts.append(
+                        {
+                            "date": latest_date,
+                            "variable": grp_variable,
+                            "metric": grp_metric,
+                            "vintage_date": vintage_date,
+                            "value": latest_value,
+                            "frequency": grp_frequency,
+                            "source": "baseline random walk model",
+                            "forecast_horizon": -1,
+                        }
+                    )
+
+                    if frequency == "M":
+                        forecast_dates = pd.date_range(
+                            start=latest_date + pd.offsets.MonthEnd(), periods=forecast_periods, freq="ME"
+                        )
+                    elif frequency == "Q":
+                        forecast_dates = pd.date_range(
+                            start=latest_date + pd.offsets.QuarterEnd(), periods=forecast_periods, freq="QE"
+                        )
+
+                    for period, date in enumerate(forecast_dates):
+                        forecasts.append(
+                            {
+                                "date": date,
+                                "variable": grp_variable,
+                                "metric": grp_metric,
+                                "vintage_date": vintage_date,
+                                "value": latest_value,
+                                "frequency": grp_frequency,
+                                "source": "baseline random walk model",
+                                "forecast_horizon": period,
+                            }
+                        )
+
+                except Exception as e:
+                    print(f"Skipping vintage {vintage_date} for {grp_variable} due to error: {e}")
+    else:
+        # --- Standard path: outturn vintages available ---
+        grouped = df.groupby(["variable", "metric", "frequency", "vintage_date"])
+
+        for (variable, metric, frequency, vintage_date), group in tqdm(
+            grouped, desc=f"Building random walk model for {variable} ({frequency})", disable=not show_progress
+        ):
+            group = group.sort_values("date")
+
+            try:
+                # Get the latest date and value
+                latest_date = group["date"].max()
+                latest_value = group[group["date"] == latest_date]["value"].iloc[0]
+
+                # Include the latest value in the forecast
                 forecasts.append(
                     {
-                        "date": date,
+                        "date": latest_date,
                         "variable": variable,
                         "metric": metric,
                         "vintage_date": vintage_date,
                         "value": latest_value,
                         "frequency": frequency,
                         "source": "baseline random walk model",
-                        "forecast_horizon": period,
+                        "forecast_horizon": -1,
                     }
                 )
 
-        except Exception as e:
-            print(f"Skipping group {variable}, {vintage_date} due to error: {e}")
+                # Generate forecast dates
+                if frequency == "M":
+                    forecast_dates = pd.date_range(
+                        start=latest_date + pd.offsets.MonthEnd(), periods=forecast_periods, freq="ME"
+                    )
+                elif frequency == "Q":
+                    forecast_dates = pd.date_range(
+                        start=latest_date + pd.offsets.QuarterEnd(), periods=forecast_periods, freq="QE"
+                    )
+
+                # Create forecast entries (random walk - same value for all forecasts)
+                for period, date in enumerate(forecast_dates):
+                    forecasts.append(
+                        {
+                            "date": date,
+                            "variable": variable,
+                            "metric": metric,
+                            "vintage_date": vintage_date,
+                            "value": latest_value,
+                            "frequency": frequency,
+                            "source": "baseline random walk model",
+                            "forecast_horizon": period,
+                        }
+                    )
+
+            except Exception as e:
+                print(f"Skipping group {variable}, {vintage_date} due to error: {e}")
 
     forecast_df = pd.DataFrame(forecasts)
 
