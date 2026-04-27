@@ -641,27 +641,6 @@ def transform_ar_coeffs(ar_coeffs):
     return ar_coeffs
 
 
-def _build_synthetic_vintaged_outturns(raw_outturns: pd.DataFrame, forecasts: pd.DataFrame) -> pd.DataFrame:
-    """Create synthetic vintaged outturns for transform_forecast_to_levels.
-
-    When outturn_vintages=False the raw outturns have vintage_date=NaT.
-    transform_forecast_to_levels needs to match each benchmark forecast's
-    vintage_date to an outturn subset. This helper creates one copy of
-    the outturns per unique vintage_date in the benchmark forecasts, filtered
-    to date < vintage_date.
-    """
-    vintage_dates = forecasts["vintage_date"].dropna().unique()
-    if len(vintage_dates) == 0:
-        return raw_outturns
-
-    frames = []
-    for v in vintage_dates:
-        subset = raw_outturns[raw_outturns["date"] < v].copy()
-        subset["vintage_date"] = v
-        frames.append(subset)
-    return pd.concat(frames, ignore_index=True)
-
-
 def add_ar_p_forecasts(
     data: ForecastData,
     variable: str | Iterable[str] | None = None,
@@ -745,15 +724,8 @@ def add_ar_p_forecasts(
     ar_forecasts = pd.concat(forecast_frames, ignore_index=True) if len(forecast_frames) > 1 else forecast_frames[0]
 
     # Transform forecasts to levels
-    if not data.outturn_vintages:
-        # Create synthetic vintaged outturns so transform_forecast_to_levels can
-        # match each benchmark vintage_date to an outturn subset
-        outturns_for_transform = _build_synthetic_vintaged_outturns(data._raw_outturns, ar_forecasts)
-    else:
-        outturns_for_transform = data._raw_outturns
-
     ar_forecasts_in_levels = transform_forecast_to_levels(
-        outturns=outturns_for_transform,
+        outturns=data._raw_outturns,
         forecasts=ar_forecasts,
     )
 
