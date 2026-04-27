@@ -5,6 +5,7 @@ import pytest
 
 from forecast_evaluation.core.outturns_revisions_table import create_outturn_revisions
 from forecast_evaluation.data.ForecastData import ForecastData
+from forecast_evaluation.data.loader import load_fer_forecasts, load_fer_outturns
 from forecast_evaluation.utils import filter_k
 
 
@@ -201,10 +202,20 @@ class TestMainTableNoVintages:
     def test_main_table_has_expected_columns(self, fd_no_vintages):
         """Main table should have all standard columns."""
         expected = {
-            "date", "variable", "vintage_date_forecast", "vintage_date_outturn",
-            "unique_id", "metric", "frequency", "forecast_horizon",
-            "value_forecast", "value_outturn", "k", "latest_vintage",
-            "forecast_error", "source",
+            "date",
+            "variable",
+            "vintage_date_forecast",
+            "vintage_date_outturn",
+            "unique_id",
+            "metric",
+            "frequency",
+            "forecast_horizon",
+            "value_forecast",
+            "value_outturn",
+            "k",
+            "latest_vintage",
+            "forecast_error",
+            "source",
         }
         assert expected.issubset(set(fd_no_vintages.df.columns))
 
@@ -218,6 +229,7 @@ class TestFilterKNoVintages:
         mt = fd_no_vintages.df
         filtered = filter_k(mt, k=12)
         assert len(filtered) == len(mt)
+
 
 # -----------------------
 # Statistical Tests (via filter_k gateway)
@@ -284,16 +296,12 @@ class TestGuardsNoVintages:
     def test_plot_outturn_revisions_raises(self, fd_no_vintages):
         """plot_outturn_revisions should raise ValueError."""
         with pytest.raises(ValueError, match="outturn vintages"):
-            fd_no_vintages.plot_outturn_revisions(
-                variable="gdpkp", metric="levels", frequency="Q"
-            )
+            fd_no_vintages.plot_outturn_revisions(variable="gdpkp", metric="levels", frequency="Q")
 
     def test_plot_outturns_raises(self, fd_no_vintages):
         """plot_outturns should raise ValueError."""
         with pytest.raises(ValueError, match="outturn vintages"):
-            fd_no_vintages.plot_outturns(
-                variable="gdpkp", metric="levels", frequency="Q"
-            )
+            fd_no_vintages.plot_outturns(variable="gdpkp", metric="levels", frequency="Q")
 
 
 # -----------------------
@@ -453,9 +461,7 @@ class TestBenchmarkModelsNoVintages:
         """add_ar_p_forecasts should add benchmark rows to main table."""
         from forecast_evaluation.core.ar_p_model import add_ar_p_forecasts
 
-        add_ar_p_forecasts(
-            fd_bench, variable="gdpkp", metric="levels", frequency="Q", estimation_start_date=None
-        )
+        add_ar_p_forecasts(fd_bench, variable="gdpkp", metric="levels", frequency="Q", estimation_start_date=None)
         sources = fd_bench.df["source"].unique()
         assert "baseline ar(p) model" in sources
 
@@ -475,3 +481,29 @@ class TestBenchmarkModelsNoVintages:
         fd_empty = ForecastData(outturns_data=outturns_long, outturn_vintages=False)
         with pytest.raises(ValueError, match="no forecasts"):
             build_ar_p_model(fd_empty, variable="gdpkp", metric="levels", frequency="Q")
+
+
+# -----------------------
+# FER Data Snapshot Tests
+# -----------------------
+class TestFERDataNoOutturnVintages:
+    @pytest.fixture
+    def fd_fer_last_vintage(self) -> ForecastData:
+        """ForecastData from minimal FER data using only the last outturn vintage."""
+        outturns = load_fer_outturns(minimal=True)
+        forecasts = load_fer_forecasts(minimal=True)
+
+        last_vintage = outturns["vintage_date"].max()
+        outturns = outturns[outturns["vintage_date"] == last_vintage].drop(columns=["vintage_date", "forecast_horizon"])
+
+        return ForecastData(
+            outturns_data=outturns,
+            forecasts_data=forecasts,
+            outturn_vintages=False,
+            compute_levels=False,
+        )
+
+    def test_main_table_snapshot(self, fd_fer_last_vintage, snapshot):
+        """Main table built from FER data with a single outturn vintage matches snapshot."""
+        random_rows = fd_fer_last_vintage._main_table.sample(n=10, random_state=42)
+        assert random_rows.to_dict() == snapshot
