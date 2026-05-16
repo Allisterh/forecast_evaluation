@@ -17,7 +17,7 @@ def plot_bias_by_horizon(
     variable: str,
     source: str,
     metric: Literal["levels", "pop", "yoy"],
-    frequency: Literal["Q", "M"],
+    frequency: Union[Literal["Q", "M"], None] = None,
     convert_to_percentage: bool = False,
     return_plot: bool = False,
 ):
@@ -49,6 +49,15 @@ def plot_bias_by_horizon(
     # Extract DataFrame if TestResult object is passed
     if hasattr(df, "to_df"):
         df = df.to_df()
+
+    if frequency is None:
+        inferred = df["frequency"].unique()
+        if len(inferred) != 1:
+            raise ValueError(
+                f"Could not infer a unique frequency from data; found: {list(inferred)}. "
+                "Please specify the 'frequency' argument explicitly."
+            )
+        frequency = inferred[0]
 
     # Filter data for the specific variable, source and metric
     mask = (

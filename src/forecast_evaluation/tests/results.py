@@ -398,7 +398,7 @@ class TestResult:
         self,
         variable: Optional[str] = None,
         metric: Optional[Literal["levels", "pop", "yoy"]] = None,
-        frequency: Optional[Literal["Q", "M"]] = "Q",
+        frequency: Optional[Literal["Q", "M"]] = None,
         statistic: Literal["rmse", "rmedse", "mse", "mean_abs_error"] = "rmse",
         benchmark_model: str = None,
         convert_to_percentage: bool = False,
@@ -422,6 +422,13 @@ class TestResult:
                 metric = unique_metrics[0]
             else:
                 raise ValueError(f"Multiple metrics found: {unique_metrics}. Please specify 'metric' parameter.")
+
+        if frequency is None:
+            unique_freqs = self._df["frequency"].unique()
+            if len(unique_freqs) == 1:
+                frequency = unique_freqs[0]
+            else:
+                raise ValueError(f"Multiple frequencies found: {unique_freqs}. Please specify 'frequency' parameter.")
 
         if benchmark_model is None:
             return plot_accuracy(

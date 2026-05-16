@@ -14,9 +14,9 @@ def plot_forecast_errors(
     data: ForecastData,
     variable: str,
     metric: Literal["levels", "pop", "yoy"],
-    frequency: Literal["Q", "M"],
     source: str,
     vintage_date_forecast: str,
+    frequency: Union[Literal["Q", "M"], None] = None,
     k: int = 12,
     convert_to_percentage: bool = False,
     return_plot: bool = False,
@@ -55,6 +55,15 @@ def plot_forecast_errors(
 
     df = data._main_table.copy()
     df = filter_k(df, k)
+
+    if frequency is None:
+        inferred = df["frequency"].unique()
+        if len(inferred) != 1:
+            raise ValueError(
+                f"Could not infer a unique frequency from data; found: {list(inferred)}. "
+                "Please specify the 'frequency' argument explicitly."
+            )
+        frequency = inferred[0]
 
     # Filter data for the specific combination
     mask = (
@@ -113,7 +122,7 @@ def plot_forecast_errors_by_horizon(
     variable: str,
     source: Union[str, list[str]],
     metric: Literal["levels", "pop", "yoy"],
-    frequency: Literal["Q", "M"],
+    frequency: Union[Literal["Q", "M"], None] = None,
     k: int = 12,
     convert_to_percentage: bool = False,
     return_plot: bool = False,
@@ -154,6 +163,15 @@ def plot_forecast_errors_by_horizon(
 
     df = data._main_table.copy()
     df = filter_k(df, k)
+
+    if frequency is None:
+        inferred = df["frequency"].unique()
+        if len(inferred) != 1:
+            raise ValueError(
+                f"Could not infer a unique frequency from data; found: {list(inferred)}. "
+                "Please specify the 'frequency' argument explicitly."
+            )
+        frequency = inferred[0]
 
     # Filter data for the specific variable, sources and metric
     mask = (
@@ -245,8 +263,8 @@ def plot_forecast_error_density(
     variable: str,
     horizon: int,
     metric: Literal["levels", "pop", "yoy"],
-    frequency: Literal["Q", "M"],
     source: str,
+    frequency: Union[Literal["Q", "M"], None] = None,
     k: int = 12,
     highlight_dates: Optional[Union[str, list[str]]] = None,
     highlight_vintages: Optional[Union[str, list[str]]] = None,
@@ -288,6 +306,15 @@ def plot_forecast_error_density(
 
     df = data._main_table.copy()
     df = filter_k(df, k)
+
+    if frequency is None:
+        inferred = df["frequency"].unique()
+        if len(inferred) != 1:
+            raise ValueError(
+                f"Could not infer a unique frequency from data; found: {list(inferred)}. "
+                "Please specify the 'frequency' argument explicitly."
+            )
+        frequency = inferred[0]
 
     # Filter data for the specific combination
     mask = (

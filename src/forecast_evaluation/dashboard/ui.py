@@ -305,9 +305,7 @@ def create_sidebar(data):
         # Variables (single select – hidden when Radar tab is in variables mode)
         ui.panel_conditional(
             "input.tabs != 'About' && !(input.tabs == 'Efficiency' && input.efficiency_subtabs == 'Blanchard-Leigh') && !(input.tabs == 'Radar' && input.radar_mode == 'variables')",
-            ui.input_selectize(
-                "variable", "Variable:", choices=variable, multiple=False, selected=variable[0]
-            ),
+            ui.input_selectize("variable", "Variable:", choices=variable, multiple=False, selected=variable[0]),
         ),
         # Variables (multi select – only for Radar variables mode)
         ui.panel_conditional(

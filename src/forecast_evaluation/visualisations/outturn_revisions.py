@@ -13,7 +13,7 @@ def plot_outturn_revisions(
     data: ForecastData,
     variable: str,
     metric: Literal["levels", "pop", "yoy"],
-    frequency: Literal["Q", "M"],
+    frequency: Union[Literal["Q", "M"], None] = None,
     k: Union[int, list[int]] = 12,
     fill_k: bool = False,
     ma_window: int = 1,
@@ -65,6 +65,15 @@ def plot_outturn_revisions(
 
     # Create outturn revisions dataframe
     revisions_df = create_outturn_revisions(data=data)
+
+    if frequency is None:
+        inferred = revisions_df["frequency"].unique()
+        if len(inferred) != 1:
+            raise ValueError(
+                f"Could not infer a unique frequency from data; found: {list(inferred)}. "
+                "Please specify the 'frequency' argument explicitly."
+            )
+        frequency = inferred[0]
 
     # Filter for the specified variable, metric, and frequency
     filtered_df = (
@@ -165,7 +174,7 @@ def plot_outturns(
     data: ForecastData,
     variable: str,
     metric: Literal["levels", "pop", "yoy"],
-    frequency: Literal["Q", "M"],
+    frequency: Union[Literal["Q", "M"], None] = None,
     k: Union[int, list[int]] = 12,
     fill_k: bool = True,
     start_date: Union[date, str] = None,
@@ -210,6 +219,15 @@ def plot_outturns(
 
     # Create outturn revisions dataframe
     revisions_df = create_outturn_revisions(data=data)
+
+    if frequency is None:
+        inferred = revisions_df["frequency"].unique()
+        if len(inferred) != 1:
+            raise ValueError(
+                f"Could not infer a unique frequency from data; found: {list(inferred)}. "
+                "Please specify the 'frequency' argument explicitly."
+            )
+        frequency = inferred[0]
 
     # Filter for the specified variable, metric, and frequency
     filtered_df = (

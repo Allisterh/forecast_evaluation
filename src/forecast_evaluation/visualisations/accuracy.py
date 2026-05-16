@@ -138,8 +138,8 @@ def plot_compare_to_benchmark(
     df: pd.DataFrame,
     variable: str,
     metric: Literal["levels", "pop", "yoy"],
-    frequency: Literal["Q", "M"],
     benchmark_model: str,
+    frequency: Union[Literal["Q", "M"], None] = None,
     statistic: Literal["rmse", "rmedse", "mean_abs_error"] = "rmse",
     return_plot: bool = False,
 ):
@@ -176,6 +176,15 @@ def plot_compare_to_benchmark(
 
     # Extract the ratio column name
     ratio_col = f"{statistic}_to_benchmark"
+
+    if frequency is None:
+        inferred = df["frequency"].unique()
+        if len(inferred) != 1:
+            raise ValueError(
+                f"Could not infer a unique frequency from data; found: {list(inferred)}. "
+                "Please specify the 'frequency' argument explicitly."
+            )
+        frequency = inferred[0]
 
     # Filter data for the specific combination
     mask = (

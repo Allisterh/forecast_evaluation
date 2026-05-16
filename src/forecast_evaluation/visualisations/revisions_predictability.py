@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 from forecast_evaluation.visualisations.theme import create_themed_figure
 
 
-def plot_average_revision_by_period(data, source, variable, metric, frequency, return_plot: bool = False):
+def plot_average_revision_by_period(data, source, variable, metric, frequency=None, return_plot: bool = False):
     """Plot the average revision grouped by forecast_horizon.
 
     Creates a line plot showing how the average size of forecast revisions
@@ -34,6 +34,15 @@ def plot_average_revision_by_period(data, source, variable, metric, frequency, r
         raise ValueError("ForecastData forecasts is not available. Please ensure data has been added and processed.")
 
     forecasts = data._forecasts.copy()
+
+    if frequency is None:
+        inferred = forecasts["frequency"].unique()
+        if len(inferred) != 1:
+            raise ValueError(
+                f"Could not infer a unique frequency from data; found: {list(inferred)}. "
+                "Please specify the 'frequency' argument explicitly."
+            )
+        frequency = inferred[0]
 
     df = forecasts[
         (forecasts["variable"] == variable)
