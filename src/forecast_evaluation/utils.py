@@ -127,42 +127,34 @@ def ensure_consistent_date_range(df: pd.DataFrame) -> pd.DataFrame:
     # For each variable and metric, find the date range that all sources have in common
     # Grouping by metric ensures that the consistent range is metric-specific,
     # preventing metrics with different date availability from affecting each other.
-    group_cols = ["variable", "unique_id"]
-    merge_cols = ["variable"]
+    group_cols = ["variable"]
 
     # Include metric in grouping if present, so each metric gets its own consistent range
     if "metric" in df.columns:
-        group_cols = ["variable", "metric", "unique_id"]
-        merge_cols = ["variable", "metric"]
+        group_cols = ["variable", "metric"]
 
     if "vintage_date_forecast" in df.columns:
-        date_ranges = df.groupby(group_cols)["vintage_date_forecast"].agg(["min", "max"]).reset_index()
+        date_col = "vintage_date_forecast"
     elif "vintage_date" in df.columns:
-        date_ranges = df.groupby(group_cols)["vintage_date"].agg(["min", "max"]).reset_index()
+        date_col = "vintage_date"
     else:
         raise ValueError("DataFrame must contain either 'vintage_date_forecast' or 'vintage_date' column.")
 
-    # For each variable (and metric), get the consistent date range (latest start, earliest end)
-    consistent_ranges = (
-        date_ranges.groupby(merge_cols)
-        .agg(
-            {
-                "min": "max",  # Latest start date across all sources
-                "max": "min",  # Earliest end date across all sources
-            }
-        )
-        .reset_index()
-    )
-    consistent_ranges.columns = merge_cols + ["start_date", "end_date"]
+    # For each (variable, [metric]) group, compute the intersection of (vintage_date, date) pairs
+    # across all unique_ids, then filter to keep only those common pairs.
+    parts = []
+    for _, group in df.groupby(group_cols, sort=False):
+        by_uid = group.groupby("unique_id")
+        pair_sets = [set(zip(sub[date_col], sub["date"])) for _, sub in by_uid]
+        common_pairs = set.intersection(*pair_sets)
+        mask = pd.Series(
+            list(zip(group[date_col], group["date"])),
+            index=group.index,
+        ).isin(common_pairs)
+        parts.append(group[mask])
+    df = pd.concat(parts, ignore_index=True)
 
-    # Merge back and filter
-    df = df.merge(consistent_ranges, on=merge_cols)
-    if "vintage_date_forecast" in df.columns:
-        df = df[(df["vintage_date_forecast"] >= df["start_date"]) & (df["vintage_date_forecast"] <= df["end_date"])]
-    else:
-        df = df[(df["vintage_date"] >= df["start_date"]) & (df["vintage_date"] <= df["end_date"])]
-
-    return df.drop(["start_date", "end_date"], axis=1)
+    return df
 
 
 def flatten_col_name(obj: pd.DataFrame | pd.Series) -> pd.DataFrame | pd.Series:
