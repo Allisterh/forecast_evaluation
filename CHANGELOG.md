@@ -49,7 +49,7 @@
 ## [0.1.8] - 2026-05-08
 - Added forecast error correlation analysis and plots.
 
-## [0.1.8.dev] - 
+## [0.1.9] - 2026-06-04 
 ### Added
 - `first_forecast_horizon` argument on `ForecastData` and `add_forecasts`; accepts an int or a dict mapping variable names to per-variable thresholds (variables not in the dict default to 0). Computed from the data if not given. Allows backtesting and forecasting in addition to "nowcasting".
 - `publication_lag` argument on `create_pseudo_vintages`; the method now also works on outturns without vintages.
